@@ -6,32 +6,43 @@ export default function ImageCanvas({
   base,
   onClick,
   registerDraw,
-  captureMode = false, // 좌표 뽑기용 토글
-  defaultRadiusPx = 18, // 콘솔 출력용 기본 r(px)
+  captureMode = false,
+  defaultRadiusPx = 18,
 }) {
   const wrapRef = useRef(null);
   const imgRef = useRef(null);
   const cvsRef = useRef(null);
 
-  // ★ drawMark를 먼저 선언 (eslint 경고 방지)
-  function drawMark({ x, y, r, kind }) {
+  // 그림 그리는 함수
+  function drawMark(op) {
     const cvs = cvsRef.current;
     if (!cvs) return;
     const ctx = cvs.getContext("2d");
+
+    // [기능 추가] 캔버스 전체 지우기 (X표 제거용)
+    if (op.type === "clear") {
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      return;
+    }
+
+    const { x, y, r, kind } = op;
     ctx.save();
     ctx.lineWidth = 3;
 
     if (kind === "hit") {
+      // [수정] O 표시 크기를 0.7배로 축소
       ctx.strokeStyle = "#3BE37F";
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
       ctx.stroke();
     } else if (kind === "lock") {
+      // [수정] 확정된 정답도 조금 작게
       ctx.strokeStyle = "#FFD166";
       ctx.beginPath();
-      ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+      ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
       ctx.stroke();
     } else {
+      // X 표시는 그대로
       ctx.strokeStyle = "#FF5E57";
       ctx.beginPath();
       ctx.moveTo(x - r, y - r);
@@ -45,13 +56,12 @@ export default function ImageCanvas({
     ctx.restore();
   }
 
-  // 외부에서 draw 호출 가능하도록 등록
   useEffect(() => {
     if (!registerDraw) return;
     registerDraw((op) => drawMark(op));
   }, [registerDraw]);
 
-  // 이미지 ↔ 캔버스 크기 동기화
+  // 이미지 크기 동기화
   useEffect(() => {
     const img = imgRef.current;
     const cvs = cvsRef.current;
@@ -63,8 +73,7 @@ export default function ImageCanvas({
       cvs.style.height = rect.height + "px";
       cvs.width = base.w;
       cvs.height = base.h;
-      const ctx = cvs.getContext("2d");
-      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      // 리사이즈 시 기존 그림이 날아가므로 필요하면 외부에서 redraw 해줘야 함
     };
     sync();
     const obs = new ResizeObserver(sync);
@@ -83,13 +92,11 @@ export default function ImageCanvas({
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
 
-    // 화면 → 원본 좌표
     const ux = Math.round((localX * base.w) / rect.width);
     const uy = Math.round((localY * base.h) / rect.height);
 
     onClick?.(ux, uy);
 
-    // 좌표 에디터 모드: 0..1로 콘솔 출력
     if (captureMode) {
       const nx = +(ux / base.w).toFixed(4);
       const ny = +(uy / base.h).toFixed(4);
@@ -112,6 +119,7 @@ export default function ImageCanvas({
           height: "auto",
           display: "block",
           borderRadius: 8,
+          cursor: captureMode ? "crosshair" : "default",
         }}
       />
       <canvas

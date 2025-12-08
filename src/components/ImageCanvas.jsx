@@ -1,117 +1,129 @@
-// src/components/ImageCanvas.jsx
-import { useEffect, useRef, useState } from "react";
+// client/src/components/ImageCanvas.jsx
+import { useEffect, useRef } from "react";
 
-/**
- * 자동 리사이즈 캔버스
- * - 부모 박스 폭에 맞춰 width 100%
- * - height = width * (crop.sh / crop.sw)
- * - DPR 반영
- *
- * props:
- *   img: HTMLImageElement (스프라이트)
- *   crop: { sx, sy, sw, sh }  // 스프라이트에서 잘라낼 영역
- *   drawMarks: [{ type:'hit'|'miss', x, y, r }] // 이미 화면좌표(px) 기준
- *   onClick: (localX, localY, canvasW, canvasH) => void
- */
-export default function ImageCanvas({ img, crop, drawMarks = [], onClick }) {
+export default function ImageCanvas({
+  src,
+  base,
+  onClick,
+  registerDraw,
+  captureMode = false, // 좌표 뽑기용 토글
+  defaultRadiusPx = 18, // 콘솔 출력용 기본 r(px)
+}) {
   const wrapRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [size, setSize] = useState({ w: 0, h: 0 }); // 렌더 크기(px)
+  const imgRef = useRef(null);
+  const cvsRef = useRef(null);
 
-  // 부모 폭 변화에 반응해 캔버스 픽셀 사이즈 갱신
-  useEffect(() => {
-    const wrapEl = wrapRef.current;
-    if (!wrapEl) return;
-
-    const update = () => {
-      const cssW = Math.max(1, wrapEl.clientWidth); // 가로 100%
-      const aspect = crop ? crop.sh / crop.sw : 1; // 세로 비율
-      const cssH = Math.round(cssW * aspect);
-
-      const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      // CSS 크기
-      canvas.style.width = cssW + "px";
-      canvas.style.height = cssH + "px";
-
-      // 실제 픽셀 크기
-      canvas.width = Math.round(cssW * dpr);
-      canvas.height = Math.round(cssH * dpr);
-
-      setSize({ w: cssW, h: cssH });
-    };
-
-    const ro = new ResizeObserver(update);
-    ro.observe(wrapEl);
-    update();
-    return () => ro.disconnect();
-  }, [crop?.sw, crop?.sh]);
-
-  // 그리기
-  useEffect(() => {
-    if (!img || !crop) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-
-    // 캔버스 픽셀 단위로 그림
+  // ★ drawMark를 먼저 선언 (eslint 경고 방지)
+  function drawMark({ x, y, r, kind }) {
+    const cvs = cvsRef.current;
+    if (!cvs) return;
+    const ctx = cvs.getContext("2d");
     ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    ctx.lineWidth = 3;
 
-    // 원본에서 crop 영역을 캔버스 전체로 스케일 렌더
-    ctx.drawImage(
-      img,
-      crop.sx,
-      crop.sy,
-      crop.sw,
-      crop.sh,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-    // 마크(이미 화면 좌표 px 기준이므로, DPR 반영해서 그리기)
-    drawMarks.forEach((m) => {
-      if (m.type === "hit") {
-        ctx.lineWidth = 4 * dpr;
-        ctx.strokeStyle = "#22c55e";
-        ctx.beginPath();
-        ctx.arc(m.x * dpr, m.y * dpr, m.r * dpr, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (m.type === "miss") {
-        const R = m.r * dpr;
-        ctx.lineWidth = 4 * dpr;
-        ctx.strokeStyle = "#ef4444";
-        ctx.beginPath();
-        ctx.moveTo(m.x * dpr - R, m.y * dpr - R);
-        ctx.lineTo(m.x * dpr + R, m.y * dpr + R);
-        ctx.moveTo(m.x * dpr + R, m.y * dpr - R);
-        ctx.lineTo(m.x * dpr - R, m.y * dpr + R);
-        ctx.stroke();
-      }
-    });
-
+    if (kind === "hit") {
+      ctx.strokeStyle = "#3BE37F";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (kind === "lock") {
+      ctx.strokeStyle = "#FFD166";
+      ctx.beginPath();
+      ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = "#FF5E57";
+      ctx.beginPath();
+      ctx.moveTo(x - r, y - r);
+      ctx.lineTo(x + r, y + r);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + r, y - r);
+      ctx.lineTo(x - r, y + r);
+      ctx.stroke();
+    }
     ctx.restore();
-  }, [img, crop, drawMarks, size.w, size.h]);
-
-  function handleClick(e) {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    onClick && onClick(cx, cy, rect.width, rect.height); // 현재 렌더 크기 전달
   }
 
+  // 외부에서 draw 호출 가능하도록 등록
+  useEffect(() => {
+    if (!registerDraw) return;
+    registerDraw((op) => drawMark(op));
+  }, [registerDraw]);
+
+  // 이미지 ↔ 캔버스 크기 동기화
+  useEffect(() => {
+    const img = imgRef.current;
+    const cvs = cvsRef.current;
+    if (!img || !cvs) return;
+
+    const sync = () => {
+      const rect = img.getBoundingClientRect();
+      cvs.style.width = rect.width + "px";
+      cvs.style.height = rect.height + "px";
+      cvs.width = base.w;
+      cvs.height = base.h;
+      const ctx = cvs.getContext("2d");
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+    };
+    sync();
+    const obs = new ResizeObserver(sync);
+    obs.observe(img);
+    return () => obs.disconnect();
+  }, [src, base.w, base.h]);
+
+  const handlePointer = (e) => {
+    const img = imgRef.current;
+    if (!img) return;
+
+    const rect = img.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+
+    // 화면 → 원본 좌표
+    const ux = Math.round((localX * base.w) / rect.width);
+    const uy = Math.round((localY * base.h) / rect.height);
+
+    onClick?.(ux, uy);
+
+    // 좌표 에디터 모드: 0..1로 콘솔 출력
+    if (captureMode) {
+      const nx = +(ux / base.w).toFixed(4);
+      const ny = +(uy / base.h).toFixed(4);
+      const nr = +(defaultRadiusPx / base.w).toFixed(4);
+      console.log(`{ id: ?, nx: ${nx}, ny: ${ny}, nr: ${nr} },`);
+      drawMark({ x: ux, y: uy, r: defaultRadiusPx, kind: "hit" });
+    }
+  };
+
   return (
-    <div ref={wrapRef} style={{ width: "100%" }}>
-      <canvas ref={canvasRef} onClick={handleClick} />
+    <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
+      <img
+        ref={imgRef}
+        src={src}
+        alt=""
+        onClick={handlePointer}
+        onTouchStart={handlePointer}
+        style={{
+          width: "100%",
+          height: "auto",
+          display: "block",
+          borderRadius: 8,
+        }}
+      />
+      <canvas
+        ref={cvsRef}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          pointerEvents: "none",
+        }}
+      />
     </div>
   );
 }

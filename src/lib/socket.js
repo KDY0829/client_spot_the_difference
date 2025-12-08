@@ -3,7 +3,7 @@ import { BACKEND_URL } from "./config";
 import { setMyId, setPeerId, maybeStartCall, initRTCSignal } from "./rtc";
 
 export const sock = io(BACKEND_URL, {
-  transports: ["websocket"], // ← 핵심
+  transports: ["websocket"], // 폴링 대신 바로 WebSocket
   withCredentials: false,
 });
 

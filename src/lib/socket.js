@@ -2,7 +2,10 @@ import { io } from "socket.io-client";
 import { BACKEND_URL } from "./config";
 import { setMyId, setPeerId, maybeStartCall, initRTCSignal } from "./rtc";
 
-export const sock = io(BACKEND_URL);
+export const sock = io(BACKEND_URL, {
+  transports: ["websocket"], // ← 핵심
+  withCredentials: false,
+});
 
 initRTCSignal();
 

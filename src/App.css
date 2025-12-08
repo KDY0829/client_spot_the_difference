@@ -1,0 +1,85 @@
+/* 레이아웃 */
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto; /* 버튼줄 / 헤더 / 메인 / 푸터 */
+}
+
+/* 상단 버튼 줄 */
+.app__topbar {
+  padding: 8px 16px 0;
+}
+.app button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--btn);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.app button:hover {
+  filter: brightness(1.08);
+}
+
+/* 헤더(고정) */
+.app__header {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.app__header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.2px;
+}
+
+/* 메인 */
+.app__main {
+  padding: 12px 16px;
+}
+.app__main h1,
+.app__main h2,
+.app__main h3 {
+  margin-top: 0;
+}
+
+/* 푸터 */
+.app__footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* 반응형 */
+@media (min-width: 640px) {
+  .app__header {
+    min-height: 60px;
+    padding: 14px 20px;
+  }
+  .app__header h1 {
+    font-size: 20px;
+  }
+  .app__main {
+    padding: 16px 20px;
+  }
+}
+@media (min-width: 960px) {
+  .app__header {
+    min-height: 64px;
+    padding: 16px 24px;
+  }
+  .app__header h1 {
+    font-size: 22px;
+  }
+  .app__main {
+    padding: 20px 24px;
+  }
+}

@@ -1,4 +1,3 @@
-// client/src/components/SpotGame.jsx
 import { useEffect, useRef, useState } from "react";
 import ImageCanvas from "./ImageCanvas";
 import { sock, sendReady, claimSpot } from "../lib/socket";
@@ -10,8 +9,6 @@ export default function SpotGame() {
   const [endsAt, setEndsAt] = useState(null);
   const [image, setImage] = useState(null);
   const [base, setBase] = useState({ w: 1024, h: 500 });
-
-  // ★ 참여자 목록 상태
   const [players, setPlayers] = useState([]);
 
   const [spots, setSpots] = useState([]);
@@ -26,7 +23,7 @@ export default function SpotGame() {
   const draw = (op) => drawRef.current && drawRef.current(op);
   const registerDraw = (fn) => (drawRef.current = fn);
 
-  // 화면 갱신
+  // 화면 갱신: X만 지우고 정답(O)은 유지
   const redrawHits = (currentHits) => {
     draw({ type: "clear" });
     currentHits.forEach((spotId) => {
@@ -35,12 +32,9 @@ export default function SpotGame() {
     });
   };
 
-  // ★ 참여자 목록(roster) 수신
   useEffect(() => {
     const handleRoster = (data) => {
-      if (data.roster && data.roster.players) {
-        setPlayers(data.roster.players);
-      }
+      if (data.roster && data.roster.players) setPlayers(data.roster.players);
     };
     sock.on("joined", handleRoster);
     sock.on("peer-joined", handleRoster);
@@ -52,14 +46,13 @@ export default function SpotGame() {
     };
   }, []);
 
-  // 게임 시작
   useEffect(() => {
     const onStart = ({ image, base, spots, startsAt, endsAt }) => {
       setImage(image);
       if (base?.w) setBase(base);
 
       const toPx = (s) => ({
-        id: s.id, // ★ ID가 여기서 매핑됩니다.
+        id: s.id,
         x: Math.round(s.nx * base.w),
         y: Math.round(s.ny * base.h),
         r: Math.round(s.nr * base.w),
@@ -74,7 +67,6 @@ export default function SpotGame() {
       setScores({});
       setResult(null);
       setEndsAt(endsAt);
-
       draw({ type: "clear" });
 
       let t;
@@ -94,18 +86,14 @@ export default function SpotGame() {
     return () => sock.off("start", onStart);
   }, []);
 
-  // 정답(lock) 수신
   useEffect(() => {
     const onLock = ({ spotId, scores }) => {
       if (scores) setScores(scores);
-
       setHits((prev) => {
         if (prev.includes(spotId)) return prev;
         const next = [...prev, spotId];
-
         const s = spotsRef.current.find((v) => v.id === spotId);
         if (s) draw({ x: s.x, y: s.y, r: s.r, kind: "lock" });
-
         return next;
       });
     };
@@ -162,22 +150,16 @@ export default function SpotGame() {
     }
 
     if (best && bestD <= best.r) {
-      // [정답]
       if (best.id) {
-        // ID가 있을 때만 전송
         draw({ x: best.x, y: best.y, r: best.r, kind: "hit" });
         sendRT({ t: "mark", x: best.x, y: best.y, r: best.r, kind: "hit" });
 
         const rid = window.__roomId || localStorage.getItem("roomId");
         claimSpot(rid, best.id);
-      } else {
-        console.error("ID가 없는 스팟을 클릭했습니다:", best);
       }
     } else {
-      // [오답]
       draw({ x: ux, y: uy, r: 10, kind: "miss" });
       sendRT({ t: "mark", x: ux, y: uy, r: 10, kind: "miss" });
-
       setTimeout(() => {
         setHits((prev) => {
           redrawHits(prev);
@@ -191,9 +173,26 @@ export default function SpotGame() {
   const myScore = scores && myId ? scores[myId] || 0 : 0;
   const total = spots.length;
 
+  let resultMessage = "";
+  let resultColor = "#fff";
+  if (result) {
+    const amIWinner = result.winners.includes(myId);
+    const isDraw = result.winners.length > 1;
+
+    if (isDraw && amIWinner) {
+      resultMessage = "무승부 🤝";
+      resultColor = "#FFD166";
+    } else if (amIWinner) {
+      resultMessage = "승리! 🏆";
+      resultColor = "#3BE37F";
+    } else {
+      resultMessage = "패배... 😭";
+      resultColor = "#FF5E57";
+    }
+  }
+
   return (
     <div>
-      {/* ★ 참여자 명단 표시 */}
       <div
         style={{
           background: "#1a2030",
@@ -253,11 +252,11 @@ export default function SpotGame() {
             다시하기
           </button>
         )}
+
         {phase === "countdown" && <span>시작: {count}</span>}
         {phase === "playing" && leftSec != null && (
           <span>남은시간: {leftSec}s</span>
         )}
-
         <span style={{ marginLeft: "auto", fontSize: "1.1em" }}>
           점수: <b style={{ color: "#6aa3ff" }}>{myScore}</b>
         </span>
@@ -268,6 +267,7 @@ export default function SpotGame() {
 
       <div
         style={{
+          position: "relative",
           width: "100%",
           maxWidth: 1024,
           margin: "0 auto",
@@ -277,6 +277,39 @@ export default function SpotGame() {
           background: "#0e1320",
         }}
       >
+        {result && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 10,
+              background: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              borderRadius: 8,
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "3rem",
+                color: resultColor,
+                marginBottom: "20px",
+                textShadow: "0 4px 10px rgba(0,0,0,0.5)",
+              }}
+            >
+              {resultMessage}
+            </h2>
+            <div style={{ fontSize: "1.2rem", color: "#ddd" }}>
+              {result.reason === "time-out"
+                ? "시간 종료!"
+                : "모든 정답을 찾았습니다!"}
+            </div>
+          </div>
+        )}
+
         {image ? (
           <ImageCanvas
             src={image}

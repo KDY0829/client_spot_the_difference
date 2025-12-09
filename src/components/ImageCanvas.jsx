@@ -14,23 +14,18 @@ export default function ImageCanvas({ src, base, onClick, registerDraw }) {
       return;
     }
 
-    const { x, y, kind } = op; // r은 받지만 무시합니다.
-
-    // ★ 강제 고정 크기 설정 (여기 숫자를 바꾸면 크기가 바뀝니다)
-    const FIXED_RADIUS = 20;
+    const { x, y, kind } = op;
+    const FIXED_RADIUS = 20; // ★ 무조건 20px로 고정
 
     ctx.save();
     ctx.lineWidth = 3;
 
     if (kind === "hit" || kind === "lock") {
-      // 정답: 초록/노랑
       ctx.strokeStyle = kind === "hit" ? "#3BE37F" : "#FFD166";
       ctx.beginPath();
-      // r 대신 FIXED_RADIUS 사용 -> 무조건 20px 크기로 그림
       ctx.arc(x, y, FIXED_RADIUS, 0, Math.PI * 2);
       ctx.stroke();
     } else {
-      // 오답: 빨강 X (크기 고정)
       const X_SIZE = 10;
       ctx.strokeStyle = "#FF5E57";
       ctx.beginPath();

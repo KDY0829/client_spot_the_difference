@@ -14,27 +14,32 @@ export default function ImageCanvas({ src, base, onClick, registerDraw }) {
       return;
     }
 
-    const { x, y, r, kind } = op;
+    const { x, y, kind } = op; // r은 받지만 무시합니다.
+
+    // ★ 강제 고정 크기 설정 (여기 숫자를 바꾸면 크기가 바뀝니다)
+    const FIXED_RADIUS = 20;
+
     ctx.save();
     ctx.lineWidth = 3;
 
     if (kind === "hit" || kind === "lock") {
-      // 정답: 초록/노랑 (크기 0.7배로 축소)
+      // 정답: 초록/노랑
       ctx.strokeStyle = kind === "hit" ? "#3BE37F" : "#FFD166";
       ctx.beginPath();
-      // 크기가 여전히 크면 아래 0.7 을 0.5로 바꾸세요.
-      ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+      // r 대신 FIXED_RADIUS 사용 -> 무조건 20px 크기로 그림
+      ctx.arc(x, y, FIXED_RADIUS, 0, Math.PI * 2);
       ctx.stroke();
     } else {
-      // 오답: 빨강 X
+      // 오답: 빨강 X (크기 고정)
+      const X_SIZE = 10;
       ctx.strokeStyle = "#FF5E57";
       ctx.beginPath();
-      ctx.moveTo(x - r, y - r);
-      ctx.lineTo(x + r, y + r);
+      ctx.moveTo(x - X_SIZE, y - X_SIZE);
+      ctx.lineTo(x + X_SIZE, y + X_SIZE);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(x + r, y - r);
-      ctx.lineTo(x - r, y + r);
+      ctx.moveTo(x + X_SIZE, y - X_SIZE);
+      ctx.lineTo(x - X_SIZE, y + X_SIZE);
       ctx.stroke();
     }
     ctx.restore();
@@ -44,7 +49,6 @@ export default function ImageCanvas({ src, base, onClick, registerDraw }) {
     if (registerDraw) registerDraw(drawMark);
   }, [registerDraw]);
 
-  // 캔버스 크기 동기화
   useEffect(() => {
     const img = imgRef.current;
     const cvs = cvsRef.current;

@@ -1,3 +1,4 @@
+// client/src/components/SpotGame.jsx
 import { useEffect, useRef, useState } from "react";
 import ImageCanvas from "./ImageCanvas";
 import { sock, sendReady, claimSpot } from "../lib/socket";
@@ -10,7 +11,7 @@ export default function SpotGame() {
   const [image, setImage] = useState(null);
   const [base, setBase] = useState({ w: 1024, h: 500 });
 
-  // ★ 참여자 목록 상태 추가
+  // ★ 참여자 목록 상태
   const [players, setPlayers] = useState([]);
 
   const [spots, setSpots] = useState([]);
@@ -34,22 +35,16 @@ export default function SpotGame() {
     });
   };
 
-  // ★ [추가] 참여자 목록 실시간 수신 (입장/퇴장)
+  // ★ 참여자 목록(roster) 수신
   useEffect(() => {
     const handleRoster = (data) => {
-      // 서버가 보내주는 roster: { players: [{id, name}, ...] }
       if (data.roster && data.roster.players) {
         setPlayers(data.roster.players);
       }
     };
-
-    // 1. 내가 입장했을 때 (joined)
     sock.on("joined", handleRoster);
-    // 2. 남이 입장했을 때 (peer-joined)
     sock.on("peer-joined", handleRoster);
-    // 3. 남이 나갔을 때 (peer-left)
     sock.on("peer-left", handleRoster);
-
     return () => {
       sock.off("joined", handleRoster);
       sock.off("peer-joined", handleRoster);
@@ -64,7 +59,7 @@ export default function SpotGame() {
       if (base?.w) setBase(base);
 
       const toPx = (s) => ({
-        id: s.id,
+        id: s.id, // ★ ID가 여기서 매핑됩니다.
         x: Math.round(s.nx * base.w),
         y: Math.round(s.ny * base.h),
         r: Math.round(s.nr * base.w),
@@ -168,11 +163,16 @@ export default function SpotGame() {
 
     if (best && bestD <= best.r) {
       // [정답]
-      draw({ x: best.x, y: best.y, r: best.r, kind: "hit" });
-      sendRT({ t: "mark", x: best.x, y: best.y, r: best.r, kind: "hit" });
+      if (best.id) {
+        // ID가 있을 때만 전송
+        draw({ x: best.x, y: best.y, r: best.r, kind: "hit" });
+        sendRT({ t: "mark", x: best.x, y: best.y, r: best.r, kind: "hit" });
 
-      const rid = window.__roomId || localStorage.getItem("roomId");
-      claimSpot(rid, best.id);
+        const rid = window.__roomId || localStorage.getItem("roomId");
+        claimSpot(rid, best.id);
+      } else {
+        console.error("ID가 없는 스팟을 클릭했습니다:", best);
+      }
     } else {
       // [오답]
       draw({ x: ux, y: uy, r: 10, kind: "miss" });
@@ -193,7 +193,7 @@ export default function SpotGame() {
 
   return (
     <div>
-      {/* ★ 참여자 목록 표시 영역 */}
+      {/* ★ 참여자 명단 표시 */}
       <div
         style={{
           background: "#1a2030",
@@ -227,7 +227,6 @@ export default function SpotGame() {
         )}
       </div>
 
-      {/* 게임 컨트롤 바 */}
       <div
         style={{
           marginBottom: 8,

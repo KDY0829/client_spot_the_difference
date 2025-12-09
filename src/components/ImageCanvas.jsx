@@ -15,7 +15,7 @@ export default function ImageCanvas({ src, base, onClick, registerDraw }) {
     }
 
     const { x, y, kind } = op;
-    const FIXED_RADIUS = 20; // ★ 무조건 20px로 고정
+    const FIXED_RADIUS = 15; // 정답 원 크기
 
     ctx.save();
     ctx.lineWidth = 3;

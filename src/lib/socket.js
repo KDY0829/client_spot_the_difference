@@ -3,7 +3,7 @@ import { BACKEND_URL } from "./config";
 import { setMyId, setPeerId, maybeStartCall, initRTCSignal } from "./rtc";
 
 export const sock = io(BACKEND_URL, {
-  transports: ["websocket"], // 폴링 대신 바로 WebSocket
+  transports: ["websocket"],
   withCredentials: false,
 });
 
@@ -15,12 +15,15 @@ export function joinRoom(roomId, name) {
   sock.emit("join", { roomId, name });
 }
 
-// ready / claim
+// ready
 export function sendReady(roomId) {
   sock.emit("ready", { roomId });
 }
-export function claimSpot(roomId, spotIdx) {
-  sock.emit("claim", { roomId, spotIdx });
+
+// ★ 수정된 부분: spotIdx -> spotId 로 변경
+export function claimSpot(roomId, spotId) {
+  // 서버가 받는 이름(spotId)과 똑같이 맞춰줍니다.
+  sock.emit("claim", { roomId, spotId });
 }
 
 // WebRTC 시그널 래퍼
@@ -34,6 +37,7 @@ export function onSignal(fn) {
 // 로스터/ID 연동 & 핸드셰이크
 sock.on("joined", (p) => {
   setMyId(p.you);
+  // roster 정보가 있으면 처리
   const others = (p.roster?.players || [])
     .map((v) => v.id)
     .filter((id) => id !== p.you);

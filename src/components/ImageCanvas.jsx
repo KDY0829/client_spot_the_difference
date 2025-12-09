@@ -1,4 +1,3 @@
-// client/src/components/ImageCanvas.jsx
 import { useEffect, useRef } from "react";
 
 export default function ImageCanvas({
@@ -30,13 +29,13 @@ export default function ImageCanvas({
     ctx.lineWidth = 3;
 
     if (kind === "hit") {
-      // [수정] O 표시 크기를 0.7배로 축소
+      // [수정] O 표시 크기를 0.7배로 축소 (작게)
       ctx.strokeStyle = "#3BE37F";
       ctx.beginPath();
       ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
       ctx.stroke();
     } else if (kind === "lock") {
-      // [수정] 확정된 정답도 조금 작게
+      // [수정] 확정된 정답도 작게
       ctx.strokeStyle = "#FFD166";
       ctx.beginPath();
       ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
@@ -61,7 +60,7 @@ export default function ImageCanvas({
     registerDraw((op) => drawMark(op));
   }, [registerDraw]);
 
-  // 이미지 크기 동기화
+  // 이미지 ↔ 캔버스 크기 동기화
   useEffect(() => {
     const img = imgRef.current;
     const cvs = cvsRef.current;
@@ -73,7 +72,7 @@ export default function ImageCanvas({
       cvs.style.height = rect.height + "px";
       cvs.width = base.w;
       cvs.height = base.h;
-      // 리사이즈 시 기존 그림이 날아가므로 필요하면 외부에서 redraw 해줘야 함
+      // 리사이즈 시 초기화되므로 필요시 외부에서 다시 그려야 함
     };
     sync();
     const obs = new ResizeObserver(sync);
@@ -92,16 +91,20 @@ export default function ImageCanvas({
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
 
+    // 화면 → 원본 좌표 변환
     const ux = Math.round((localX * base.w) / rect.width);
     const uy = Math.round((localY * base.h) / rect.height);
 
     onClick?.(ux, uy);
 
+    // 좌표 추출 모드 (개발용)
     if (captureMode) {
       const nx = +(ux / base.w).toFixed(4);
       const ny = +(uy / base.h).toFixed(4);
       const nr = +(defaultRadiusPx / base.w).toFixed(4);
-      console.log(`{ id: ?, nx: ${nx}, ny: ${ny}, nr: ${nr} },`);
+      console.log(
+        `{ id: "spot_${Date.now()}", nx: ${nx}, ny: ${ny}, nr: ${nr} },`
+      );
       drawMark({ x: ux, y: uy, r: defaultRadiusPx, kind: "hit" });
     }
   };

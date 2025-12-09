@@ -7,13 +7,16 @@ export default function SpotGame() {
   const [phase, setPhase] = useState("idle");
   const [count, setCount] = useState(null);
   const [endsAt, setEndsAt] = useState(null);
-
   const [image, setImage] = useState(null);
   const [base, setBase] = useState({ w: 1024, h: 500 });
-  const [spots, setSpots] = useState([]);
 
-  // 상태 관리
-  const [hits, setHits] = useState([]); // 찾은 정답들의 ID 목록
+  // ★ 참여자 목록 상태 추가
+  const [players, setPlayers] = useState([]);
+
+  const [spots, setSpots] = useState([]);
+  const spotsRef = useRef([]);
+
+  const [hits, setHits] = useState([]);
   const [scores, setScores] = useState({});
   const [result, setResult] = useState(null);
   const [leftSec, setLeftSec] = useState(null);
@@ -22,23 +25,43 @@ export default function SpotGame() {
   const draw = (op) => drawRef.current && drawRef.current(op);
   const registerDraw = (fn) => (drawRef.current = fn);
 
-  // ✅ 핵심 함수: 화면을 싹 지우고 "찾은 정답(O)"들만 다시 그림
+  // 화면 갱신
   const redrawHits = (currentHits) => {
-    // 1. 전체 지우기 (X표시 삭제됨)
     draw({ type: "clear" });
-
-    // 2. 서버에서 인정한 정답들(hits) 다시 그리기 (O표시 복구)
     currentHits.forEach((spotId) => {
-      const s = spots.find((v) => v.id === spotId);
-      if (s) draw({ x: s.x, y: s.y, r: s.r, kind: "lock" }); // lock = 노란/초록 O
+      const s = spotsRef.current.find((v) => v.id === spotId);
+      if (s) draw({ x: s.x, y: s.y, r: s.r, kind: "lock" });
     });
   };
 
-  // 게임 시작 데이터 수신
+  // ★ [추가] 참여자 목록 실시간 수신 (입장/퇴장)
+  useEffect(() => {
+    const handleRoster = (data) => {
+      // 서버가 보내주는 roster: { players: [{id, name}, ...] }
+      if (data.roster && data.roster.players) {
+        setPlayers(data.roster.players);
+      }
+    };
+
+    // 1. 내가 입장했을 때 (joined)
+    sock.on("joined", handleRoster);
+    // 2. 남이 입장했을 때 (peer-joined)
+    sock.on("peer-joined", handleRoster);
+    // 3. 남이 나갔을 때 (peer-left)
+    sock.on("peer-left", handleRoster);
+
+    return () => {
+      sock.off("joined", handleRoster);
+      sock.off("peer-joined", handleRoster);
+      sock.off("peer-left", handleRoster);
+    };
+  }, []);
+
+  // 게임 시작
   useEffect(() => {
     const onStart = ({ image, base, spots, startsAt, endsAt }) => {
       setImage(image);
-      if (base?.w && base?.h) setBase(base);
+      if (base?.w) setBase(base);
 
       const toPx = (s) => ({
         id: s.id,
@@ -46,8 +69,10 @@ export default function SpotGame() {
         y: Math.round(s.ny * base.h),
         r: Math.round(s.nr * base.w),
       });
-      // 서버 데이터로 spots 덮어쓰기
-      setSpots((spots || []).map(toPx));
+
+      const pxSpots = (spots || []).map(toPx);
+      setSpots(pxSpots);
+      spotsRef.current = pxSpots;
 
       setPhase("countdown");
       setHits([]);
@@ -55,7 +80,7 @@ export default function SpotGame() {
       setResult(null);
       setEndsAt(endsAt);
 
-      draw({ type: "clear" }); // 화면 초기화
+      draw({ type: "clear" });
 
       let t;
       const tick = () => {
@@ -69,21 +94,21 @@ export default function SpotGame() {
       tick();
       t = setInterval(tick, 200);
     };
+
     sock.on("start", onStart);
     return () => sock.off("start", onStart);
   }, []);
 
-  // ★ 정답 인정(lock) 수신 -> 점수판 반영
+  // 정답(lock) 수신
   useEffect(() => {
     const onLock = ({ spotId, scores }) => {
-      if (scores) setScores(scores); // 점수 업데이트
+      if (scores) setScores(scores);
 
       setHits((prev) => {
         if (prev.includes(spotId)) return prev;
         const next = [...prev, spotId];
 
-        // 정답 O 그리기
-        const s = spots.find((v) => v.id === spotId);
+        const s = spotsRef.current.find((v) => v.id === spotId);
         if (s) draw({ x: s.x, y: s.y, r: s.r, kind: "lock" });
 
         return next;
@@ -91,9 +116,8 @@ export default function SpotGame() {
     };
     sock.on("lock", onLock);
     return () => sock.off("lock", onLock);
-  }, [spots]);
+  }, []);
 
-  // 라운드 종료
   useEffect(() => {
     const onOver = ({ scores, winners, reason }) => {
       setResult({ scores, winners, reason });
@@ -104,16 +128,12 @@ export default function SpotGame() {
     return () => sock.off("round-over", onOver);
   }, []);
 
-  // 상대방 마우스 효과(실시간)
   useEffect(() => {
     onRT((msg) => {
-      if (msg.t === "mark") {
-        draw({ x: msg.x, y: msg.y, r: msg.r, kind: msg.kind });
-      }
+      if (msg.t === "mark") draw({ ...msg });
     });
   }, []);
 
-  // 남은 시간 타이머
   useEffect(() => {
     if (phase !== "playing" || !endsAt) return;
     const tick = () =>
@@ -124,59 +144,90 @@ export default function SpotGame() {
   }, [phase, endsAt]);
 
   const handleReady = () => {
-    const rid = window.__roomId || "abc";
+    const rid = window.__roomId || localStorage.getItem("roomId");
+    if (!rid) {
+      alert("방 이름이 없습니다. 새로고침 후 다시 Join 해주세요.");
+      return;
+    }
     sendReady(rid);
     setPhase("ready");
   };
 
-  // ★ 클릭 처리
   const handleClick = (ux, uy) => {
     if (phase !== "playing") return;
 
-    // 1. 가장 가까운 스팟 찾기
     let best = null,
       bestD = Infinity;
-    for (const s of spots) {
+    for (const s of spotsRef.current) {
       const d = Math.hypot(s.x - ux, s.y - uy);
       if (!hits.includes(s.id) && d < bestD) {
-        // 이미 찾은건 제외
         bestD = d;
         best = s;
       }
     }
 
-    // 2. 판정 (반지름 이내인가?)
     if (best && bestD <= best.r) {
       // [정답]
-      // 일단 내 화면에 O를 그림
       draw({ x: best.x, y: best.y, r: best.r, kind: "hit" });
       sendRT({ t: "mark", x: best.x, y: best.y, r: best.r, kind: "hit" });
 
-      // 서버에 "나 맞췄어!" 라고 알림 -> 서버가 인정해야 점수가 오름
-      const rid = window.__roomId || "abc";
+      const rid = window.__roomId || localStorage.getItem("roomId");
       claimSpot(rid, best.id);
     } else {
       // [오답]
-      // X 표시 그리기
       draw({ x: ux, y: uy, r: 10, kind: "miss" });
       sendRT({ t: "mark", x: ux, y: uy, r: 10, kind: "miss" });
 
-      // ★ 3초 뒤 X표시만 지우기 (화면 전체 지우고 정답들 복구)
       setTimeout(() => {
-        setHits((prevHits) => {
-          redrawHits(prevHits); // 현재까지 찾은 정답들 다시 그리기
-          return prevHits;
+        setHits((prev) => {
+          redrawHits(prev);
+          return prev;
         });
       }, 3000);
     }
   };
 
-  const total = spots.length;
   const myId = sock.id;
   const myScore = scores && myId ? scores[myId] || 0 : 0;
+  const total = spots.length;
 
   return (
     <div>
+      {/* ★ 참여자 목록 표시 영역 */}
+      <div
+        style={{
+          background: "#1a2030",
+          padding: "8px 12px",
+          borderRadius: 8,
+          marginBottom: 10,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: "0.95rem",
+        }}
+      >
+        <span style={{ color: "#aaa" }}>참여자:</span>
+        {players.length > 0 ? (
+          players.map((p) => (
+            <span
+              key={p.id}
+              style={{
+                background: p.id === myId ? "#6aa3ff" : "#273043",
+                color: p.id === myId ? "#fff" : "#ccc",
+                padding: "4px 8px",
+                borderRadius: 4,
+                fontWeight: p.id === myId ? "bold" : "normal",
+              }}
+            >
+              {p.name} {p.id === myId ? "(나)" : ""}
+            </span>
+          ))
+        ) : (
+          <span style={{ color: "#666" }}>접속 중...</span>
+        )}
+      </div>
+
+      {/* 게임 컨트롤 바 */}
       <div
         style={{
           marginBottom: 8,
@@ -197,7 +248,6 @@ export default function SpotGame() {
             onClick={() => {
               setHits([]);
               setResult(null);
-              setEndsAt(null);
               handleReady();
             }}
           >
@@ -209,9 +259,8 @@ export default function SpotGame() {
           <span>남은시간: {leftSec}s</span>
         )}
 
-        {/* 점수 표시 */}
-        <span style={{ marginLeft: "auto" }}>
-          점수: <b style={{ fontSize: "1.3em", color: "#6aa3ff" }}>{myScore}</b>
+        <span style={{ marginLeft: "auto", fontSize: "1.1em" }}>
+          점수: <b style={{ color: "#6aa3ff" }}>{myScore}</b>
         </span>
         <span>
           정답 {hits.length}/{total}
@@ -227,8 +276,6 @@ export default function SpotGame() {
           borderRadius: 8,
           padding: 12,
           background: "#0e1320",
-          userSelect: "none",
-          touchAction: "none",
         }}
       >
         {image ? (
@@ -239,7 +286,7 @@ export default function SpotGame() {
             registerDraw={registerDraw}
           />
         ) : (
-          <div style={{ opacity: 0.7 }}>이미지 대기… (Join → 준비)</div>
+          <div style={{ opacity: 0.7 }}>이미지 대기 중... (Join → 준비)</div>
         )}
       </div>
     </div>
